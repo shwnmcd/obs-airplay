@@ -9,8 +9,8 @@ IDR_LOCALE_EN_US  RCDATA "@LOCALE_EN_US_PATH@"
 IDR_LICENSE_TXT   RCDATA "@LICENSE_PATH@"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     1,2,0,0
-PRODUCTVERSION  1,2,0,0
+FILEVERSION     1,2,1,0
+PRODUCTVERSION  1,2,1,0
 FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
 FILEFLAGS       0
 FILEOS          VOS_NT_WINDOWS32
@@ -22,13 +22,13 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName",      "obs-airplay"
-            VALUE "FileDescription",  "OBS AirPlay Screen Cast 1.2.0 Setup"
-            VALUE "FileVersion",      "1.2.0.0"
+            VALUE "FileDescription",  "OBS AirPlay Screen Cast 1.2.1 Setup"
+            VALUE "FileVersion",      "1.2.1.0"
             VALUE "InternalName",     "obs-airplay-setup"
             VALUE "LegalCopyright",   "Copyright (C) 2026 obs-airplay (GPL-3.0)"
-            VALUE "OriginalFilename", "obs-airplay-1.2.0-windows-x64-Setup.exe"
+            VALUE "OriginalFilename", "obs-airplay-1.2.1-windows-x64-Setup.exe"
             VALUE "ProductName",      "OBS AirPlay Screen Cast"
-            VALUE "ProductVersion",   "1.2.0"
+            VALUE "ProductVersion",   "1.2.1"
         END
     END
     BLOCK "VarFileInfo"

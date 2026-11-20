@@ -244,7 +244,7 @@ static void test_plugin_dll_exports(const char *dll_path, const char *obs_bin_di
 		uint32_t minor = (ver >> 16) & 0xFF;
 		uint32_t patch = ver & 0xFFFF;
 		std::cout << "[INFO] obs_module_ver() = " << major << "." << minor << "." << patch << "\n";
-		CHECK(major == 33, "Plugin reports LIBOBS_API_MAJOR_VER == 33");
+		CHECK(major == 30, "Plugin reports universal LIBOBS_API_MAJOR_VER == 30 (loads on OBS 30, 31, 32, 33+)");
 	}
 	if (fn_name) {
 		std::cout << "[INFO] obs_module_name() = " << fn_name() << "\n";

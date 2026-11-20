@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(obs-airplay VERSION 1.2.0 LANGUAGES C CXX)
+project(obs-airplay VERSION 1.2.1 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -105,10 +105,11 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# OBS Studio 33.0.1 & FFmpeg 8.0 ABI Headers + Import Libraries
+# OBS Studio (libobs 30-33+ universal C ABI) & Static Minimal FFmpeg 8.0 Decoders
 # ---------------------------------------------------------------------------
 set(LIBOBS_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/obs-studio/libobs")
-set(FFMPEG8_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg-8.0")
+set(FFMPEG_STATIC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg-static-install")
+set(FFMPEG8_INCLUDE_DIR "${FFMPEG_STATIC_DIR}/include")
 set(GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 if(WIN32 AND MINGW)
@@ -116,11 +117,21 @@ if(WIN32 AND MINGW)
     find_program(DLLTOOL_EXECUTABLE dlltool HINTS "C:/msys64/ucrt64/bin" REQUIRED)
     include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_obs_import_libs.cmake")
 
+    # Only link obs.dll from OBS Studio; FFmpeg decoders are statically linked so
+    # obs-airplay.dll works identically across OBS Studio 30, 31, 32, 33, and newer!
     generate_import_lib("obs" LIBOBS_IMPORT)
-    generate_import_lib("avcodec-62" LIBAVCODEC_IMPORT)
-    generate_import_lib("avutil-60" LIBAVUTIL_IMPORT)
-    generate_import_lib("swresample-6" LIBSWRESAMPLE_IMPORT)
-    generate_import_lib("swscale-9" LIBSWSCALE_IMPORT)
+
+    set(FFMPEG_STATIC_LIBS
+        "${FFMPEG_STATIC_DIR}/lib/libavcodec.a"
+        "${FFMPEG_STATIC_DIR}/lib/libswresample.a"
+        "${FFMPEG_STATIC_DIR}/lib/libswscale.a"
+        "${FFMPEG_STATIC_DIR}/lib/libavutil.a"
+    )
+    foreach(_fflib ${FFMPEG_STATIC_LIBS})
+        if(NOT EXISTS "${_fflib}")
+            message(FATAL_ERROR "Missing static FFmpeg library: ${_fflib}. Run scripts/build-static-ffmpeg.sh first.")
+        endif()
+    endforeach()
 endif()
 
 # ---------------------------------------------------------------------------
@@ -160,15 +171,13 @@ if(WIN32 AND MINGW)
     target_link_libraries(obs-airplay PRIVATE
         uxplay_airplay
         "${LIBOBS_IMPORT}"
-        "${LIBAVCODEC_IMPORT}"
-        "${LIBAVUTIL_IMPORT}"
-        "${LIBSWRESAMPLE_IMPORT}"
-        "${LIBSWSCALE_IMPORT}"
+        ${FFMPEG_STATIC_LIBS}
+        ole32
         gdi32
         gdiplus
         dwmapi
     )
-    # Self-contained DLL: statically embed libgcc, libstdc++, libwinpthread, libcrypto, libplist
+    # Self-contained DLL: statically embed FFmpeg decoders, libgcc, libstdc++, libwinpthread, libcrypto, libplist
     target_link_options(obs-airplay PRIVATE
         -static-libgcc
         -static-libstdc++
@@ -203,10 +212,8 @@ if(OBS_AIRPLAY_BUILD_TESTS)
         target_link_libraries(test-obs-airplay PRIVATE
             uxplay_airplay
             "${LIBOBS_IMPORT}"
-            "${LIBAVCODEC_IMPORT}"
-            "${LIBAVUTIL_IMPORT}"
-            "${LIBSWRESAMPLE_IMPORT}"
-            "${LIBSWSCALE_IMPORT}"
+            ${FFMPEG_STATIC_LIBS}
+            ole32
             gdi32
             gdiplus
             dwmapi

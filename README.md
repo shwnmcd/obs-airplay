@@ -1,6 +1,6 @@
 # obs-airplay — Native iPhone / iPad AirPlay Screen Cast Plugin for OBS Studio
 
-A native C/C++ **OBS Studio 33+** plugin that turns OBS Studio directly into a zero-app **Apple AirPlay Screen Mirroring** receiver for iPhone and iPad — complete with **GPU rounded corners & back shadow** and **stream-safe 2FA security**.
+A native C/C++ **OBS Studio 30 / 31 / 32 / 33+** plugin that turns OBS Studio directly into a zero-app **Apple AirPlay Screen Mirroring** receiver for iPhone and iPad — complete with **GPU rounded corners & back shadow** and **stream-safe 2FA security**.
 
 No iOS app install, no USB cable, no GStreamer runtime, and no external helper processes — just install, add **iPhone / iPad Screen Cast (AirPlay)** in OBS, swipe down Control Center on your iPhone/iPad, tap **Screen Mirroring**, and choose **OBS iPhone Cast**.
 
@@ -21,14 +21,14 @@ No iOS app install, no USB cable, no GStreamer runtime, and no external helper p
 ## Easy Installation (Windows x64)
 
 ### Option 1: One-Click Installer (Recommended)
-Run **`dist\obs-airplay-1.2.0-windows-x64-Setup.exe`**:
+Run **`dist\obs-airplay-1.2.1-windows-x64-Setup.exe`**:
 - Closes OBS gracefully if running
-- Installs to `C:\ProgramData\obs-studio\plugins\obs-airplay`
+- Installs to `C:\ProgramData\obs-studio\plugins\obs-airplay` (and Portable OBS if detected)
 - Configures LocalSubnet-only Windows Firewall rules for OBS AirPlay
 - Registers a clean uninstaller in **Windows Settings → Installed Apps**
 
 ### Option 2: Portable ZIP
-Extract **`dist\obs-airplay-1.2.0-windows-x64-portable.zip`** and either:
+Extract **`dist\obs-airplay-1.2.1-windows-x64-portable.zip`** and either:
 - Double-click **`Install.bat`**, or
 - Copy the `obs-airplay` folder into your portable OBS Studio `plugins/` directory.
 

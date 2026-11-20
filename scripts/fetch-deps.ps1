@@ -28,9 +28,8 @@ if (-not (Test-Path $obsDir)) {
 
 $ffDir = Join-Path $tp "ffmpeg-8.0"
 if (-not (Test-Path $ffDir)) {
-    Write-Host "Fetching FFmpeg $FfmpegTag public headers..." -ForegroundColor Cyan
-    git clone --depth 1 --filter=blob:none --sparse --branch $FfmpegTag https://github.com/FFmpeg/FFmpeg.git $ffDir
-    git -C $ffDir sparse-checkout set --no-cone "libavcodec/*.h" "libavutil/*.h" "libswresample/*.h" "libswscale/*.h"
+    Write-Host "Fetching FFmpeg $FfmpegTag source for minimal static decoders..." -ForegroundColor Cyan
+    git clone --depth 1 --branch $FfmpegTag https://github.com/FFmpeg/FFmpeg.git $ffDir
 }
 
 Write-Host "All third-party dependencies ready in $tp" -ForegroundColor Green

@@ -1,6 +1,6 @@
 ; Optional Inno Setup 6 script for OBS AirPlay Screen Cast (Windows x64)
 #define MyAppName "OBS AirPlay Screen Cast"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.2.1"
 #define MyAppPublisher "obs-airplay"
 
 [Setup]

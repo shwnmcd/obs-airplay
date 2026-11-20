@@ -34,7 +34,7 @@ using std::min;
 namespace {
 
 constexpr const wchar_t *kAppName = L"OBS AirPlay Screen Cast";
-constexpr const wchar_t *kAppVersion = L"1.2.0";
+constexpr const wchar_t *kAppVersion = L"1.2.1";
 constexpr const wchar_t *kInstallDir = L"C:\\ProgramData\\obs-studio\\plugins\\obs-airplay";
 constexpr const wchar_t *kUninstallRegKey = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\OBS-AirPlay";
 constexpr const wchar_t *kSetupWindowClass = L"ObsAirPlaySetupWindowV1";
@@ -62,6 +62,8 @@ std::wstring detect_obs_exe()
 {
 	const wchar_t *candidates[] = {
 		L"C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe",
+		L"C:\\Program Files (x86)\\Steam\\steamapps\\common\\OBS Studio\\bin\\64bit\\obs64.exe",
+		L"D:\\SteamLibrary\\steamapps\\common\\OBS Studio\\bin\\64bit\\obs64.exe",
 		L"C:\\Program Files (x86)\\obs-studio\\bin\\64bit\\obs64.exe",
 	};
 	for (const wchar_t *c : candidates) {
@@ -280,6 +282,18 @@ bool perform_install(bool add_firewall, std::wstring &status_msg)
 		return false;
 	}
 
+	// If OBS Studio is detected in Portable Mode, also install into the portable plugins tree
+	const std::filesystem::path obs_exe_path(detect_obs_exe());
+	const std::filesystem::path obs_root = obs_exe_path.parent_path().parent_path().parent_path();
+	if (!obs_root.empty() &&
+	    (std::filesystem::exists(obs_root / L"portable_mode.txt") ||
+	     std::filesystem::exists(obs_root / L"obs_portable_mode.txt"))) {
+		std::wstring p_err;
+		extract_resource_to_file(IDR_PLUGIN_DLL, obs_root / L"obs-plugins" / L"64bit" / L"obs-airplay.dll", p_err);
+		extract_resource_to_file(IDR_FRAME_EFFECT, obs_root / L"data" / L"obs-plugins" / L"obs-airplay" / L"airplay_frame.effect", p_err);
+		extract_resource_to_file(IDR_LOCALE_EN_US, obs_root / L"data" / L"obs-plugins" / L"obs-airplay" / L"locale" / L"en-US.ini", p_err);
+	}
+
 	// Copy self as uninstaller and register in Windows Installed Apps
 	wchar_t self_path[MAX_PATH] = {};
 	GetModuleFileNameW(nullptr, self_path, MAX_PATH);
@@ -494,7 +508,7 @@ void render_setup_ui(HWND hwnd, HDC hdc, SetupUiState *st)
 						    : (std::wstring(kAppName) + L"  v" + kAppVersion);
 		g.DrawString(header_title.c_str(), -1, &f_title,
 			     Gdiplus::RectF(64.0f * s, 8.0f * s, fw - 110.0f * s, 24.0f * s), &sf_l, &tp);
-		g.DrawString(L"Native Zero-App iPhone / iPad Screen Mirroring Plugin for OBS Studio 33+", -1, &f_sub,
+		g.DrawString(L"Native Zero-App iPhone / iPad Screen Mirroring Plugin for OBS Studio 30-33+", -1, &f_sub,
 			     Gdiplus::RectF(64.0f * s, 30.0f * s, fw - 110.0f * s, 18.0f * s), &sf_l, &tm);
 
 		// Close X
