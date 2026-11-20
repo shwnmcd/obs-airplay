@@ -142,34 +142,28 @@ $sums = "$hashSetup  $setupName`n$hashZip  $zipName`n"
 Set-Content -Path (Join-Path $distDir "SHA256SUMS.txt") -Value $sums -Encoding ASCII
 
 $notes = @"
-# OBS AirPlay Screen Cast v$Version (Windows x64)
+Cast your **iPhone or iPad screen & audio** directly into **OBS Studio (30, 31, 32, and 33+)** over Wi-Fi — no iOS app needed.
 
-Native zero-app **iPhone & iPad AirPlay Screen Mirroring** plugin for **OBS Studio 30, 31, 32, and 33+**.
+### Install
+1. Download and run **``$setupName``** *(recommended)*.
+2. Open **OBS Studio** → **Sources** → **+** → **iPhone / iPad Screen Cast (AirPlay)**.
+3. On your iPhone/iPad, open **Control Center → Screen Mirroring** → **OBS iPhone Cast**.
 
-## What's New in v$Version
-- **Universal OBS Studio 30 / 31 / 32 / 33+ Compatibility**: Statically embeds minimal FFmpeg 8.0 decoders (`H.264`, `HEVC`, `D3D11VA`, `AAC-ELD`, `AAC-LC`, `ALAC`) and targets the universal `libobs` 30+ C ABI — fixing the issue where `obs-airplay.dll` would not load on OBS Studio 30, 31, or 32 due to `avcodec-62.dll` / API 33 version checks.
-- **Improved Installer Detection**: Detects standard OBS Studio, Steam OBS, and Portable Mode installs automatically.
+### Highlights
+- **Universal OBS 30–33+ support** (standard, Steam, and Portable OBS)
+- **Zero-app iOS screen & audio mirroring** (H.264 / HEVC + hardware decode)
+- **GPU rounded corners, border & drop shadow** in Source Properties
+- **Stream-safe 2FA PIN & Allow/Deny popups** inside OBS (hidden from capture)
 
-## Highlights
-- **Zero-App iOS Screen & Audio Mirroring**: Swipe down Control Center → Screen Mirroring on your iPhone/iPad and cast straight into OBS with H.264/HEVC (optional D3D11VA hardware decode) and synchronized AAC-ELD/AAC-LC/ALAC audio.
-- **Smart Network Interface Selection**: Automatically skips VPN/virtual adapters (Radmin VPN, Tailscale, Hyper-V, WSL) and picks your local Wi-Fi/LAN adapter, with a manual interface picker in Source Properties.
-- **GPU Rounded Corners, Border & Back Shadow**: Built-in SDF GPU shader with live-editable corner radius, bezel border stroke, and soft drop shadow with zero clipping on portrait/landscape rotation.
-- **Stream-Safe 2FA Security & Trusted Devices**:
-  - One-Time 4-Digit 2FA PIN per connection, Ed25519 Pairing PIN + Remember Trusted iPhones, or Static Password
-  - In-OBS **Yami Dark**-themed 2FA Code & **Allow & Trust / Allow Once / Deny** approval popups protected by ``WDA_EXCLUDEFROMCAPTURE`` (invisible to OBS Display Capture)
-  - 3-strike brute-force rate limiting and Strict Allowlist mode
+<details>
+<summary>SHA-256 Checksums</summary>
 
-## Downloads
-- **Recommended — One-Click Windows Installer**: ``$setupName``
-  - Installs the plugin into ``C:\ProgramData\obs-studio\plugins\obs-airplay`` (and portable OBS if detected), configures LocalSubnet-only Windows Firewall rules, and registers a clean Windows Installed Apps uninstaller.
-- **Portable Archive**: ``$zipName``
-  - Includes the standard OBS plugin folder structure plus double-click ``Install.bat`` / ``Uninstall.bat``.
-
-## SHA-256 Checksums
 ``````text
 $hashSetup  $setupName
 $hashZip  $zipName
 ``````
+
+</details>
 "@
 Set-Content -Path (Join-Path $distDir "RELEASE_NOTES.md") -Value $notes -Encoding UTF8
 
