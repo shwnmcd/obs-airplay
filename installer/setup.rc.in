@@ -1,0 +1,38 @@
+#include <winver.h>
+#include "resource.h"
+
+1 24 "setup.manifest"
+
+IDR_PLUGIN_DLL    RCDATA "@PLUGIN_DLL_PATH@"
+IDR_FRAME_EFFECT  RCDATA "@FRAME_EFFECT_PATH@"
+IDR_LOCALE_EN_US  RCDATA "@LOCALE_EN_US_PATH@"
+IDR_LICENSE_TXT   RCDATA "@LICENSE_PATH@"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     1,2,0,0
+PRODUCTVERSION  1,2,0,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "obs-airplay"
+            VALUE "FileDescription",  "OBS AirPlay Screen Cast 1.2.0 Setup"
+            VALUE "FileVersion",      "1.2.0.0"
+            VALUE "InternalName",     "obs-airplay-setup"
+            VALUE "LegalCopyright",   "Copyright (C) 2026 obs-airplay (GPL-3.0)"
+            VALUE "OriginalFilename", "obs-airplay-1.2.0-windows-x64-Setup.exe"
+            VALUE "ProductName",      "OBS AirPlay Screen Cast"
+            VALUE "ProductVersion",   "1.2.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

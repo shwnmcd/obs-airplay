@@ -1,0 +1,14 @@
+# Build & release outputs
+build/
+dist/
+
+# Fetched third-party source trees (restored via scripts/fetch-deps.ps1)
+third_party/
+
+# Editor / OS junk
+.vscode/
+.vs/
+*.user
+*.suo
+.DS_Store
+Thumbs.db

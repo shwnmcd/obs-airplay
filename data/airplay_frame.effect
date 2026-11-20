@@ -1,0 +1,118 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+
+uniform float2 src_size;
+uniform float2 out_size;
+uniform float2 pad_origin;
+
+uniform float corner_radius;
+uniform float border_width;
+uniform float4 border_color;
+
+uniform float shadow_enabled;
+uniform float4 shadow_color;
+uniform float shadow_blur;
+uniform float shadow_spread;
+uniform float2 shadow_offset;
+
+sampler_state def_sampler {
+	Filter   = Linear;
+	AddressU = Clamp;
+	AddressV = Clamp;
+};
+
+struct VertInOut {
+	float4 pos : POSITION;
+	float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+	VertInOut vert_out;
+	vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+	vert_out.uv  = vert_in.uv;
+	return vert_out;
+}
+
+float sdRoundedBox(float2 p, float2 half_size, float r)
+{
+	float rr = min(r, min(half_size.x, half_size.y));
+	float2 q = abs(p) - half_size + float2(rr, rr);
+	return length(max(q, float2(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - rr;
+}
+
+float approxTanh(float x)
+{
+	float xc = clamp(x, -8.0, 8.0);
+	float e2x = exp(2.0 * xc);
+	return (e2x - 1.0) / (e2x + 1.0);
+}
+
+float4 PSAirPlayFrame(VertInOut vert_in) : TARGET
+{
+	// Pixel position in expanded output space and local source space
+	float2 px = vert_in.uv * out_size;
+	float2 local_px = px - pad_origin;
+	float2 half_size = src_size * 0.5;
+	float2 p = local_px - half_size;
+
+	float r = clamp(corner_radius, 0.0, min(half_size.x, half_size.y));
+
+	// Signed distance to the rounded phone screen rectangle
+	float d_fg = sdRoundedBox(p, half_size, r);
+
+	// Subpixel antialiased mask for the phone screen (inside d_fg <= 0)
+	float fg_mask = 1.0 - smoothstep(-0.75, 0.75, d_fg);
+
+	// Sample mirrored phone screen safely inside [0, 1]
+	float2 src_uv = clamp(local_px / max(src_size, float2(1.0, 1.0)), float2(0.0, 0.0), float2(1.0, 1.0));
+	float4 fg = image.Sample(def_sampler, src_uv);
+
+	// Optional crisp antialiased inner border stroke
+	if (border_width > 0.01 && border_color.a > 0.001) {
+		float bw = min(border_width, min(half_size.x, half_size.y));
+		// Smooth inner boundary at d_fg = -bw
+		float border_mask = smoothstep(-bw - 0.75, -bw + 0.75, d_fg);
+		float b_alpha = border_mask * border_color.a;
+		fg.rgb = lerp(fg.rgb, border_color.rgb, b_alpha);
+		fg.a = max(fg.a, b_alpha);
+	}
+	fg.a *= fg_mask;
+
+	// Optional soft Gaussian-approximated SDF back shadow
+	float4 sh = float4(0.0, 0.0, 0.0, 0.0);
+	if (shadow_enabled > 0.5 && shadow_color.a > 0.001) {
+		float2 sh_half = max(half_size + float2(shadow_spread, shadow_spread), float2(1.0, 1.0));
+		float sh_r = clamp(r + shadow_spread, 0.0, min(sh_half.x, sh_half.y));
+		float d_sh = sdRoundedBox(p - shadow_offset, sh_half, sh_r);
+
+		float sh_mask;
+		if (shadow_blur <= 0.5) {
+			sh_mask = 1.0 - smoothstep(-0.75, 0.75, d_sh);
+		} else {
+			float sigma = max(shadow_blur * 0.45, 0.5);
+			sh_mask = 0.5 * (1.0 - approxTanh(0.79788456 * (d_sh / sigma)));
+			// Smooth fade to zero before the expanded quad boundary so edges never clip
+			float edge_fade = 1.0 - smoothstep(shadow_blur * 1.15, shadow_blur * 1.48, d_sh);
+			sh_mask *= edge_fade;
+		}
+		sh = float4(shadow_color.rgb, shadow_color.a * sh_mask);
+	}
+
+	// Standard Porter-Duff "foreground over back shadow" compositing (straight alpha)
+	float out_a = fg.a + sh.a * (1.0 - fg.a);
+	float3 out_rgb = float3(0.0, 0.0, 0.0);
+	if (out_a > 0.0001) {
+		out_rgb = (fg.rgb * fg.a + sh.rgb * sh.a * (1.0 - fg.a)) / out_a;
+	}
+	return float4(out_rgb, out_a);
+}
+
+technique Draw
+{
+	pass
+	{
+		vertex_shader = VSDefault(vert_in);
+		pixel_shader  = PSAirPlayFrame(vert_in);
+	}
+}

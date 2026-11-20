@@ -1,0 +1,29 @@
+GNU GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
+
+Copyright (C) 2026 obs-airplay contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+---------------------------------------------------------------------------
+Third-Party Components & Attributions:
+- UxPlay AirPlay Mirroring Core (lib/raop, lib/mdnsd, lib/playfair,
+  lib/fairplay_v2, lib/llhttp): GPL-3.0 / LGPL-2.1 / MIT
+  https://github.com/FDH2/UxPlay
+- OBS Studio (libobs headers): GPL-2.0+
+  https://github.com/obsproject/obs-studio
+- FFmpeg 8.0 headers (dynamically linked to OBS Studio's bundled DLLs):
+  LGPL-2.1+ / GPL-2.0+
+- OpenSSL (libcrypto): Apache-2.0
+- libplist: LGPL-2.1+
