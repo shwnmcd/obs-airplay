@@ -31,6 +31,7 @@ struct ReceiverConfig {
 	bool enable_audio = true;
 	bool sync_device_volume = true;
 	bool clear_on_disconnect = true;
+	bool pause_when_hidden = true;
 	bool fixed_ports = true;
 	uint16_t port_offset = 0;
 	std::string mac_address; // Empty -> deterministic MAC derived from server_name

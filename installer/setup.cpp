@@ -34,7 +34,7 @@ using std::min;
 namespace {
 
 constexpr const wchar_t *kAppName = L"OBS AirPlay Screen Cast";
-constexpr const wchar_t *kAppVersion = L"1.2.1";
+constexpr const wchar_t *kAppVersion = L"1.2.2";
 constexpr const wchar_t *kInstallDir = L"C:\\ProgramData\\obs-studio\\plugins\\obs-airplay";
 constexpr const wchar_t *kUninstallRegKey = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\OBS-AirPlay";
 constexpr const wchar_t *kSetupWindowClass = L"ObsAirPlaySetupWindowV1";

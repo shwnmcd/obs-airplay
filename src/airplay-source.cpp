@@ -23,6 +23,7 @@ constexpr const char *kPropHardwareDecode = "hardware_decode";
 constexpr const char *kPropEnableAudio = "enable_audio";
 constexpr const char *kPropSyncVolume = "sync_device_volume";
 constexpr const char *kPropClearOnDisconnect = "clear_on_disconnect";
+constexpr const char *kPropPauseWhenHidden = "pause_when_hidden";
 constexpr const char *kPropFixedPorts = "fixed_ports";
 constexpr const char *kPropPortOffset = "port_offset";
 constexpr const char *kPropMacAddress = "mac_address";
@@ -41,7 +42,18 @@ struct AirPlaySourceContext {
 	obs_source_t *source = nullptr;
 	std::unique_ptr<AirPlayReceiver> receiver;
 	ReceiverConfig active_config;
+	bool is_showing = false;
 };
+
+std::string source_status_text(const AirPlaySourceContext *ctx)
+{
+	if (!ctx || !ctx->receiver)
+		return "Not initialized";
+	if (!ctx->receiver->is_running() && ctx->active_config.pause_when_hidden && !ctx->is_showing) {
+		return "Paused (source hidden in OBS) - Show source to accept AirPlay connections";
+	}
+	return ctx->receiver->status_summary();
+}
 
 void parse_resolution(const char *res_str, uint16_t &width, uint16_t &height)
 {
@@ -76,6 +88,7 @@ ReceiverConfig config_from_settings(obs_data_t *settings)
 	cfg.enable_audio = obs_data_get_bool(settings, kPropEnableAudio);
 	cfg.sync_device_volume = obs_data_get_bool(settings, kPropSyncVolume);
 	cfg.clear_on_disconnect = obs_data_get_bool(settings, kPropClearOnDisconnect);
+	cfg.pause_when_hidden = obs_data_get_bool(settings, kPropPauseWhenHidden);
 	cfg.fixed_ports = obs_data_get_bool(settings, kPropFixedPorts);
 
 	long long offset = obs_data_get_int(settings, kPropPortOffset);
@@ -145,6 +158,7 @@ void airplay_get_defaults(obs_data_t *settings)
 	obs_data_set_default_bool(settings, kPropEnableAudio, true);
 	obs_data_set_default_bool(settings, kPropSyncVolume, true);
 	obs_data_set_default_bool(settings, kPropClearOnDisconnect, true);
+	obs_data_set_default_bool(settings, kPropPauseWhenHidden, true);
 	obs_data_set_default_bool(settings, kPropFixedPorts, true);
 	obs_data_set_default_int(settings, kPropPortOffset, 0);
 	obs_data_set_default_string(settings, kPropMacAddress, "");
@@ -252,7 +266,8 @@ bool on_revoke_trusted_clicked(obs_properties_t *props, obs_property_t *property
 		return false;
 
 	ctx->receiver->revoke_all_trusted_devices();
-	if (ctx->active_config.security.mode == SecurityMode::PairingPinTrusted) {
+	if (ctx->receiver->is_running() &&
+	    ctx->active_config.security.mode == SecurityMode::PairingPinTrusted) {
 		ctx->receiver->stop();
 		obs_source_output_video(ctx->source, nullptr);
 		ctx->receiver->start(ctx->active_config);
@@ -270,7 +285,7 @@ obs_properties_t *airplay_get_properties(void *data)
 	auto *ctx = static_cast<AirPlaySourceContext *>(data);
 	obs_properties_t *props = obs_properties_create();
 
-	std::string status = (ctx && ctx->receiver) ? ctx->receiver->status_summary() : "Not initialized";
+	std::string status = source_status_text(ctx);
 	obs_properties_add_text(props, kPropStatus, status.c_str(), OBS_TEXT_INFO);
 
 	obs_property_t *p = obs_properties_add_text(props, kPropServerName,
@@ -359,6 +374,9 @@ obs_properties_t *airplay_get_properties(void *data)
 	p = obs_properties_add_bool(props, kPropClearOnDisconnect, obs_module_text("ClearOnDisconnect"));
 	obs_property_set_long_description(p, obs_module_text("ClearOnDisconnect.Description"));
 
+	p = obs_properties_add_bool(props, kPropPauseWhenHidden, obs_module_text("PauseWhenHidden"));
+	obs_property_set_long_description(p, obs_module_text("PauseWhenHidden.Description"));
+
 	obs_property_t *fixed = obs_properties_add_bool(props, kPropFixedPorts, obs_module_text("FixedPorts"));
 	obs_property_set_long_description(fixed, obs_module_text("FixedPorts.Description"));
 	obs_property_set_modified_callback(fixed, on_fixed_ports_modified);
@@ -383,8 +401,23 @@ void airplay_update(void *data, obs_data_t *settings)
 		return;
 
 	sync_frame_filter(ctx, settings);
+	ctx->is_showing = obs_source_showing(ctx->source);
 
 	ReceiverConfig next_cfg = config_from_settings(settings);
+	const bool should_run = !next_cfg.pause_when_hidden || ctx->is_showing;
+
+	if (!should_run) {
+		ctx->active_config = next_cfg;
+		if (ctx->receiver->is_running()) {
+			ctx->receiver->stop();
+			if (ctx->active_config.clear_on_disconnect) {
+				obs_source_output_video(ctx->source, nullptr);
+			}
+		}
+		ctx->receiver->update_security_policy(next_cfg.security);
+		return;
+	}
+
 	if (!ctx->receiver->is_running() || config_requires_restart(ctx->active_config, next_cfg)) {
 		ctx->active_config = next_cfg;
 		ctx->receiver->stop();
@@ -393,9 +426,40 @@ void airplay_update(void *data, obs_data_t *settings)
 		}
 		ctx->receiver->start(ctx->active_config);
 	} else {
-		// Apply non-restart security policy toggles (PC approval / strict allowlist / capture hide) live
+		// Apply non-restart policy toggles live without restarting network sockets
+		ctx->active_config.pause_when_hidden = next_cfg.pause_when_hidden;
 		ctx->active_config.security = next_cfg.security;
 		ctx->receiver->update_security_policy(next_cfg.security);
+	}
+}
+
+void airplay_show(void *data)
+{
+	auto *ctx = static_cast<AirPlaySourceContext *>(data);
+	if (!ctx || !ctx->receiver)
+		return;
+
+	ctx->is_showing = true;
+	if (!ctx->receiver->is_running()) {
+		blog(LOG_INFO, "[obs-airplay] Source shown -> starting AirPlay receiver");
+		ctx->receiver->start(ctx->active_config);
+	}
+}
+
+void airplay_hide(void *data)
+{
+	auto *ctx = static_cast<AirPlaySourceContext *>(data);
+	if (!ctx || !ctx->receiver)
+		return;
+
+	ctx->is_showing = false;
+	if (ctx->active_config.pause_when_hidden && ctx->receiver->is_running()) {
+		blog(LOG_INFO,
+		     "[obs-airplay] Source hidden -> pausing AirPlay receiver (zero background mDNS/radio activity)");
+		ctx->receiver->stop();
+		if (ctx->active_config.clear_on_disconnect) {
+			obs_source_output_video(ctx->source, nullptr);
+		}
 	}
 }
 
@@ -428,7 +492,13 @@ void *airplay_create(obs_data_t *settings, obs_source_t *source)
 		});
 
 	ctx->active_config = config_from_settings(settings);
-	ctx->receiver->start(ctx->active_config);
+	ctx->is_showing = obs_source_showing(source);
+	if (!ctx->active_config.pause_when_hidden || ctx->is_showing) {
+		ctx->receiver->start(ctx->active_config);
+	} else {
+		blog(LOG_INFO,
+		     "[obs-airplay] Receiver initialized paused (source hidden in OBS; starts automatically when shown)");
+	}
 	return ctx;
 }
 
@@ -458,6 +528,8 @@ void register_airplay_source()
 	info.get_properties = airplay_get_properties;
 	info.update = airplay_update;
 	info.load = airplay_load;
+	info.show = airplay_show;
+	info.hide = airplay_hide;
 	info.icon_type = OBS_ICON_TYPE_DESKTOP_CAPTURE;
 
 	obs_register_source(&info);

@@ -39,7 +39,7 @@ bool obs_module_load(void)
 {
 	obs_airplay::register_airplay_source();
 	obs_airplay::register_airplay_frame_filter();
-	blog(LOG_INFO, "[obs-airplay] Plugin loaded successfully (v1.2.1, universal OBS 30-33+)");
+	blog(LOG_INFO, "[obs-airplay] Plugin loaded successfully (v1.2.2, universal OBS 30-33+)");
 	return true;
 }
 

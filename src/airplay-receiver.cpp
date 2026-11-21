@@ -692,7 +692,8 @@ void AirPlayReceiver::cb_audio_process(void *cls, raop_ntp_t *ntp, audio_decode_
 {
 	(void)ntp;
 	auto *self = static_cast<AirPlayReceiver *>(cls);
-	if (!self || self->stopping_.load(std::memory_order_acquire) || !data || !self->decoder_)
+	if (!self || self->stopping_.load(std::memory_order_acquire) || !self->config_.enable_audio ||
+	    !data || !self->decoder_)
 		return;
 
 	const uint64_t obs_ts = self->map_remote_timestamp(data->ntp_time_remote);
@@ -710,7 +711,8 @@ void AirPlayReceiver::cb_video_flush(void *cls)
 void AirPlayReceiver::cb_audio_flush(void *cls)
 {
 	auto *self = static_cast<AirPlayReceiver *>(cls);
-	if (!self || self->stopping_.load(std::memory_order_acquire) || !self->decoder_)
+	if (!self || self->stopping_.load(std::memory_order_acquire) || !self->config_.enable_audio ||
+	    !self->decoder_)
 		return;
 	self->decoder_->flush_audio();
 }
@@ -760,7 +762,8 @@ void AirPlayReceiver::cb_audio_get_format(void *cls, unsigned char *ct, unsigned
 void AirPlayReceiver::cb_audio_set_volume(void *cls, float volume)
 {
 	auto *self = static_cast<AirPlayReceiver *>(cls);
-	if (!self || self->stopping_.load(std::memory_order_acquire) || !self->decoder_)
+	if (!self || self->stopping_.load(std::memory_order_acquire) || !self->config_.enable_audio ||
+	    !self->decoder_)
 		return;
 
 	float linear = 1.0f;

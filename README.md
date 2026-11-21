@@ -8,8 +8,8 @@ Works on **Windows 10/11 (64-bit)** with **OBS Studio 30, 31, 32, and 33+**.
 
 Get the latest installer from the **[Releases page](https://github.com/shwnmcd/obs-airplay/releases/latest)**:
 
-- **`obs-airplay-1.2.1-windows-x64-Setup.exe`** — One-click installer (recommended)
-- **`obs-airplay-1.2.1-windows-x64-portable.zip`** — Portable archive
+- **`obs-airplay-1.2.2-windows-x64-Setup.exe`** — One-click installer (recommended)
+- **`obs-airplay-1.2.2-windows-x64-portable.zip`** — Portable archive
 
 ## Features
 
@@ -20,7 +20,7 @@ Get the latest installer from the **[Releases page](https://github.com/shwnmcd/o
 
 ## Quick Start
 
-1. Run **`obs-airplay-1.2.1-windows-x64-Setup.exe`** and open **OBS Studio**.
+1. Run **`obs-airplay-1.2.2-windows-x64-Setup.exe`** and open **OBS Studio**.
 2. Under **Sources**, click **+** → **iPhone / iPad Screen Cast (AirPlay)**.
 3. On your iPhone/iPad, open **Control Center → Screen Mirroring** and select **OBS iPhone Cast**.
 4. Enter the 4-digit code shown inside OBS and click **Allow & Trust**.
