@@ -169,7 +169,13 @@ static void test_live_airplay_receiver_lifecycle()
 		[&](const std::string &s) { latest_status = s; });
 
 	obs_airplay::ReceiverConfig cfg;
+	CHECK(!cfg.receiver_armed, "ReceiverConfig defaults to Disarmed (Off) for zero idle radio/network activity");
+	CHECK(cfg.pause_when_hidden, "ReceiverConfig defaults to Pause When Hidden");
+	CHECK(!receiver.is_running() && receiver.airplay_port() == 0,
+	      "AirPlayReceiver opens zero sockets and stays idle until primed/started");
+
 	cfg.server_name = "OBS AirPlay SelfTest";
+	cfg.receiver_armed = true;
 	cfg.fixed_ports = true;
 	cfg.port_offset = 1230; // Use high test ports so we don't collide with running OBS
 	cfg.enable_hevc = true;
@@ -210,7 +216,20 @@ static void test_live_airplay_receiver_lifecycle()
 
 	std::this_thread::sleep_for(std::chrono::milliseconds(150));
 	receiver.stop();
-	CHECK(!receiver.is_running(), "AirPlayReceiver stopped cleanly without hanging");
+	CHECK(!receiver.is_running() && receiver.airplay_port() == 0,
+	      "AirPlayReceiver stopped cleanly without hanging and cleared port");
+
+#ifdef _WIN32
+	// Verify TCP port is actually closed after disarm/stop
+	SOCKET verify_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	sockaddr_in verify_addr = {};
+	verify_addr.sin_family = AF_INET;
+	verify_addr.sin_port = htons(port);
+	inet_pton(AF_INET, "127.0.0.1", &verify_addr.sin_addr);
+	int post_stop_res = connect(verify_sock, reinterpret_cast<sockaddr *>(&verify_addr), sizeof(verify_addr));
+	closesocket(verify_sock);
+	CHECK(post_stop_res != 0, "TCP listening socket is fully closed after disarm/stop");
+#endif
 }
 
 #ifdef _WIN32

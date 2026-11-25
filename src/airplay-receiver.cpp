@@ -57,18 +57,16 @@ uint64_t fnv1a_64(const std::string &str)
 AirPlayReceiver::AirPlayReceiver(VideoFrameCallback video_cb,
 				 AudioFrameCallback audio_cb,
 				 ClearVideoCallback clear_cb,
-				 StatusCallback status_cb)
+				 StatusCallback status_cb,
+				 SessionEndedCallback session_ended_cb)
 	: video_cb_(std::move(video_cb)),
 	  audio_cb_(std::move(audio_cb)),
 	  clear_cb_(std::move(clear_cb)),
 	  status_cb_(std::move(status_cb)),
+	  session_ended_cb_(std::move(session_ended_cb)),
 	  decoder_(std::make_unique<MediaDecoder>(video_cb_, audio_cb_)),
 	  security_(std::make_unique<SecurityManager>())
 {
-#ifdef _WIN32
-	ensure_winsock_initialized();
-#endif
-	ntp_global_init();
 }
 
 AirPlayReceiver::~AirPlayReceiver()
@@ -211,6 +209,13 @@ void AirPlayReceiver::update_security_policy(const SecurityPolicy &policy)
 	config_.security = policy;
 }
 
+void AirPlayReceiver::set_auto_disarm_on_disconnect(bool enabled)
+{
+	auto_disarm_.store(enabled, std::memory_order_release);
+	std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+	config_.auto_disarm_on_disconnect = enabled;
+}
+
 std::string AirPlayReceiver::trusted_devices_summary() const
 {
 	return security_ ? security_->trusted_devices_summary() : "Trusted Devices: Unavailable";
@@ -269,10 +274,17 @@ bool AirPlayReceiver::start(const ReceiverConfig &config)
 	}
 
 	stopping_.store(false, std::memory_order_release);
+	had_admitted_session_.store(false, std::memory_order_release);
 	config_ = config;
+	auto_disarm_.store(config_.auto_disarm_on_disconnect, std::memory_order_release);
 	if (config_.server_name.empty()) {
 		config_.server_name = "OBS iPhone Cast";
 	}
+
+#ifdef _WIN32
+	ensure_winsock_initialized();
+#endif
+	ntp_global_init();
 
 	DecoderConfig dec_cfg;
 	dec_cfg.hardware_decode = config_.hardware_decode;
@@ -518,6 +530,7 @@ void AirPlayReceiver::stop()
 	}
 
 	open_connections_.store(0, std::memory_order_relaxed);
+	had_admitted_session_.store(false, std::memory_order_release);
 	airplay_port_.store(0, std::memory_order_relaxed);
 	reset_clock_anchor();
 	if (decoder_) {
@@ -587,6 +600,7 @@ void AirPlayReceiver::cb_conn_destroy(void *cls)
 		// (iOS closes the initial challenge socket right after PAIR-PIN-START / 401 and opens
 		//  a second socket once the user finishes typing the 4-digit code.)
 		const bool pin_waiting = self->security_ && !self->security_->current_active_pin().empty();
+		const bool ended_admitted = self->had_admitted_session_.exchange(false, std::memory_order_acq_rel);
 		if (!pin_waiting) {
 			std::ostringstream oss;
 			oss << "Ready: \"" << self->config_.server_name << "\" on " << self->active_ipv4()
@@ -595,6 +609,10 @@ void AirPlayReceiver::cb_conn_destroy(void *cls)
 			self->set_status(oss.str());
 		}
 		blog(LOG_INFO, "[obs-airplay] Client disconnected");
+		if (ended_admitted && self->auto_disarm_.load(std::memory_order_acquire) && self->session_ended_cb_) {
+			blog(LOG_INFO, "[obs-airplay] Auto-disarm triggered after mirroring session ended");
+			self->session_ended_cb_();
+		}
 	}
 }
 
@@ -653,6 +671,7 @@ void AirPlayReceiver::cb_report_client_request(void *cls, char *deviceid, char *
 		return;
 	}
 
+	self->had_admitted_session_.store(true, std::memory_order_release);
 	{
 		std::lock_guard<std::mutex> lock(self->status_mutex_);
 		self->connected_device_ = dev_name + " (" + dev_model + ")";

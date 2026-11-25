@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Version = "1.2.2",
+    [string]$Version = "1.3.0",
     [string]$MsysUcrtBin = "C:\msys64\ucrt64\bin",
     [string]$ObsDir = "C:\Program Files\obs-studio"
 )

@@ -31,6 +31,8 @@ struct ReceiverConfig {
 	bool enable_audio = true;
 	bool sync_device_volume = true;
 	bool clear_on_disconnect = true;
+	bool receiver_armed = false;
+	bool auto_disarm_on_disconnect = false;
 	bool pause_when_hidden = true;
 	bool fixed_ports = true;
 	uint16_t port_offset = 0;
@@ -48,13 +50,15 @@ struct NetworkAdapterInfo {
 
 using ClearVideoCallback = std::function<void()>;
 using StatusCallback = std::function<void(const std::string &status)>;
+using SessionEndedCallback = std::function<void()>;
 
 class AirPlayReceiver {
 public:
 	AirPlayReceiver(VideoFrameCallback video_cb,
 			AudioFrameCallback audio_cb,
 			ClearVideoCallback clear_cb,
-			StatusCallback status_cb);
+			StatusCallback status_cb,
+			SessionEndedCallback session_ended_cb = {});
 	~AirPlayReceiver();
 
 	AirPlayReceiver(const AirPlayReceiver &) = delete;
@@ -68,8 +72,9 @@ public:
 	uint16_t airplay_port() const { return airplay_port_.load(std::memory_order_relaxed); }
 	std::string active_ipv4() const;
 
-	// Live security helpers
+	// Live security & policy helpers
 	void update_security_policy(const SecurityPolicy &policy);
+	void set_auto_disarm_on_disconnect(bool enabled);
 	std::string trusted_devices_summary() const;
 	void revoke_all_trusted_devices();
 
@@ -113,6 +118,7 @@ private:
 	AudioFrameCallback audio_cb_;
 	ClearVideoCallback clear_cb_;
 	StatusCallback status_cb_;
+	SessionEndedCallback session_ended_cb_;
 
 	std::unique_ptr<MediaDecoder> decoder_;
 	std::unique_ptr<SecurityManager> security_;
@@ -123,6 +129,8 @@ private:
 	raop_t *raop_ = nullptr;
 	std::atomic<bool> running_{false};
 	std::atomic<bool> stopping_{false};
+	std::atomic<bool> auto_disarm_{false};
+	std::atomic<bool> had_admitted_session_{false};
 	std::atomic<uint16_t> airplay_port_{0};
 	std::atomic<int> open_connections_{0};
 	std::atomic<double> current_volume_db_{0.0};

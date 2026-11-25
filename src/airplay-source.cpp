@@ -14,6 +14,8 @@ namespace obs_airplay {
 namespace {
 
 constexpr const char *kPropStatus = "status_info";
+constexpr const char *kPropReceiverArmed = "receiver_armed";
+constexpr const char *kPropAutoDisarm = "auto_disarm_on_disconnect";
 constexpr const char *kPropServerName = "server_name";
 constexpr const char *kPropNetworkIface = "bind_ipv4";
 constexpr const char *kPropResolution = "resolution";
@@ -43,16 +45,91 @@ struct AirPlaySourceContext {
 	std::unique_ptr<AirPlayReceiver> receiver;
 	ReceiverConfig active_config;
 	bool is_showing = false;
+	obs_hotkey_id hotkey_toggle_prime = OBS_INVALID_HOTKEY_ID;
+	obs_hotkey_id hotkey_prime_on = OBS_INVALID_HOTKEY_ID;
+	obs_hotkey_id hotkey_prime_off = OBS_INVALID_HOTKEY_ID;
 };
+
+bool should_receiver_run(const AirPlaySourceContext *ctx, const ReceiverConfig &cfg)
+{
+	if (!ctx)
+		return false;
+	return cfg.receiver_armed && (!cfg.pause_when_hidden || ctx->is_showing);
+}
 
 std::string source_status_text(const AirPlaySourceContext *ctx)
 {
 	if (!ctx || !ctx->receiver)
 		return "Not initialized";
+	if (!ctx->active_config.receiver_armed) {
+		return "OFF (Disarmed) - Enable 'Prime / Arm AirPlay Receiver' or press your Prime hotkey to listen";
+	}
 	if (!ctx->receiver->is_running() && ctx->active_config.pause_when_hidden && !ctx->is_showing) {
-		return "Paused (source hidden in OBS) - Show source to accept AirPlay connections";
+		return "ARMED (Paused while hidden in OBS) - Show source to start listening";
 	}
 	return ctx->receiver->status_summary();
+}
+
+void set_source_armed_state(obs_source_t *source, bool armed)
+{
+	if (!source)
+		return;
+	obs_data_t *settings = obs_source_get_settings(source);
+	if (!settings)
+		return;
+	obs_data_set_bool(settings, kPropReceiverArmed, armed);
+	obs_source_update(source, settings);
+	obs_data_release(settings);
+	obs_source_update_properties(source);
+}
+
+void disarm_source_ui_task(void *param)
+{
+	auto *weak = static_cast<obs_weak_source_t *>(param);
+	if (!weak)
+		return;
+	obs_source_t *src = obs_weak_source_get_source(weak);
+	obs_weak_source_release(weak);
+	if (!src)
+		return;
+	set_source_armed_state(src, false);
+	obs_source_release(src);
+}
+
+void on_hotkey_toggle_prime(void *data, obs_hotkey_id id, obs_hotkey_t *hotkey, bool pressed)
+{
+	(void)id;
+	(void)hotkey;
+	if (!pressed)
+		return;
+	auto *ctx = static_cast<AirPlaySourceContext *>(data);
+	if (!ctx || !ctx->source)
+		return;
+	set_source_armed_state(ctx->source, !ctx->active_config.receiver_armed);
+}
+
+void on_hotkey_prime_on(void *data, obs_hotkey_id id, obs_hotkey_t *hotkey, bool pressed)
+{
+	(void)id;
+	(void)hotkey;
+	if (!pressed)
+		return;
+	auto *ctx = static_cast<AirPlaySourceContext *>(data);
+	if (!ctx || !ctx->source)
+		return;
+	set_source_armed_state(ctx->source, true);
+}
+
+void on_hotkey_prime_off(void *data, obs_hotkey_id id, obs_hotkey_t *hotkey, bool pressed)
+{
+	(void)id;
+	(void)hotkey;
+	if (!pressed)
+		return;
+	auto *ctx = static_cast<AirPlaySourceContext *>(data);
+	if (!ctx || !ctx->source)
+		return;
+	set_source_armed_state(ctx->source, false);
 }
 
 void parse_resolution(const char *res_str, uint16_t &width, uint16_t &height)
@@ -88,6 +165,8 @@ ReceiverConfig config_from_settings(obs_data_t *settings)
 	cfg.enable_audio = obs_data_get_bool(settings, kPropEnableAudio);
 	cfg.sync_device_volume = obs_data_get_bool(settings, kPropSyncVolume);
 	cfg.clear_on_disconnect = obs_data_get_bool(settings, kPropClearOnDisconnect);
+	cfg.receiver_armed = obs_data_get_bool(settings, kPropReceiverArmed);
+	cfg.auto_disarm_on_disconnect = obs_data_get_bool(settings, kPropAutoDisarm);
 	cfg.pause_when_hidden = obs_data_get_bool(settings, kPropPauseWhenHidden);
 	cfg.fixed_ports = obs_data_get_bool(settings, kPropFixedPorts);
 
@@ -149,6 +228,8 @@ const char *airplay_get_name(void *type_data)
 
 void airplay_get_defaults(obs_data_t *settings)
 {
+	obs_data_set_default_bool(settings, kPropReceiverArmed, false);
+	obs_data_set_default_bool(settings, kPropAutoDisarm, false);
 	obs_data_set_default_string(settings, kPropServerName, "OBS iPhone Cast");
 	obs_data_set_default_string(settings, kPropNetworkIface, "auto");
 	obs_data_set_default_string(settings, kPropResolution, "1920x1080");
@@ -224,14 +305,42 @@ bool on_restart_clicked(obs_properties_t *props, obs_property_t *property, void 
 	if (!ctx || !ctx->receiver)
 		return false;
 
-	blog(LOG_INFO, "[obs-airplay] Manual receiver restart requested");
-	ctx->receiver->stop();
-	obs_source_output_video(ctx->source, nullptr);
-	ctx->receiver->start(ctx->active_config);
+	if (!ctx->active_config.receiver_armed) {
+		blog(LOG_INFO, "[obs-airplay] Restart ignored while receiver is disarmed (off)");
+	} else {
+		blog(LOG_INFO, "[obs-airplay] Manual receiver restart requested");
+		ctx->receiver->stop();
+		obs_source_output_video(ctx->source, nullptr);
+		ctx->receiver->start(ctx->active_config);
+	}
 
 	obs_property_t *status_prop = obs_properties_get(props, kPropStatus);
 	if (status_prop) {
-		obs_property_set_description(status_prop, ctx->receiver->status_summary().c_str());
+		obs_property_set_description(status_prop, source_status_text(ctx).c_str());
+	}
+	return true;
+}
+
+bool on_armed_modified(void *priv, obs_properties_t *props, obs_property_t *property, obs_data_t *settings)
+{
+	(void)property;
+	auto *ctx = static_cast<AirPlaySourceContext *>(priv);
+	const bool armed = obs_data_get_bool(settings, kPropReceiverArmed);
+	obs_property_t *status_prop = obs_properties_get(props, kPropStatus);
+	if (status_prop) {
+		if (!armed) {
+			obs_property_set_description(
+				status_prop,
+				"OFF (Disarmed) - Enable 'Prime / Arm AirPlay Receiver' or press your Prime hotkey to listen");
+		} else if (ctx && ctx->receiver && ctx->receiver->is_running()) {
+			obs_property_set_description(status_prop, ctx->receiver->status_summary().c_str());
+		} else if (ctx && obs_data_get_bool(settings, kPropPauseWhenHidden) && !ctx->is_showing) {
+			obs_property_set_description(
+				status_prop,
+				"ARMED (Paused while hidden in OBS) - Show source to start listening");
+		} else {
+			obs_property_set_description(status_prop, "ARMED - Ready to listen for AirPlay connections");
+		}
 	}
 	return true;
 }
@@ -288,8 +397,19 @@ obs_properties_t *airplay_get_properties(void *data)
 	std::string status = source_status_text(ctx);
 	obs_properties_add_text(props, kPropStatus, status.c_str(), OBS_TEXT_INFO);
 
-	obs_property_t *p = obs_properties_add_text(props, kPropServerName,
-						    obs_module_text("ServerName"), OBS_TEXT_DEFAULT);
+	obs_property_t *armed_prop =
+		obs_properties_add_bool(props, kPropReceiverArmed, obs_module_text("ReceiverArmed"));
+	obs_property_set_long_description(armed_prop, obs_module_text("ReceiverArmed.Description"));
+	obs_property_set_modified_callback2(armed_prop, on_armed_modified, ctx);
+
+	obs_property_t *p = obs_properties_add_bool(props, kPropAutoDisarm, obs_module_text("AutoDisarm"));
+	obs_property_set_long_description(p, obs_module_text("AutoDisarm.Description"));
+
+	p = obs_properties_add_bool(props, kPropPauseWhenHidden, obs_module_text("PauseWhenHidden"));
+	obs_property_set_long_description(p, obs_module_text("PauseWhenHidden.Description"));
+
+	p = obs_properties_add_text(props, kPropServerName,
+				    obs_module_text("ServerName"), OBS_TEXT_DEFAULT);
 	obs_property_set_long_description(p, obs_module_text("ServerName.Description"));
 
 	obs_property_t *iface = obs_properties_add_list(props, kPropNetworkIface,
@@ -374,9 +494,6 @@ obs_properties_t *airplay_get_properties(void *data)
 	p = obs_properties_add_bool(props, kPropClearOnDisconnect, obs_module_text("ClearOnDisconnect"));
 	obs_property_set_long_description(p, obs_module_text("ClearOnDisconnect.Description"));
 
-	p = obs_properties_add_bool(props, kPropPauseWhenHidden, obs_module_text("PauseWhenHidden"));
-	obs_property_set_long_description(p, obs_module_text("PauseWhenHidden.Description"));
-
 	obs_property_t *fixed = obs_properties_add_bool(props, kPropFixedPorts, obs_module_text("FixedPorts"));
 	obs_property_set_long_description(fixed, obs_module_text("FixedPorts.Description"));
 	obs_property_set_modified_callback(fixed, on_fixed_ports_modified);
@@ -404,17 +521,19 @@ void airplay_update(void *data, obs_data_t *settings)
 	ctx->is_showing = obs_source_showing(ctx->source);
 
 	ReceiverConfig next_cfg = config_from_settings(settings);
-	const bool should_run = !next_cfg.pause_when_hidden || ctx->is_showing;
+	const bool should_run = should_receiver_run(ctx, next_cfg);
 
 	if (!should_run) {
 		ctx->active_config = next_cfg;
 		if (ctx->receiver->is_running()) {
+			blog(LOG_INFO, "[obs-airplay] Disarming/pausing AirPlay receiver (zero sockets, zero mDNS)");
 			ctx->receiver->stop();
 			if (ctx->active_config.clear_on_disconnect) {
 				obs_source_output_video(ctx->source, nullptr);
 			}
 		}
 		ctx->receiver->update_security_policy(next_cfg.security);
+		ctx->receiver->set_auto_disarm_on_disconnect(next_cfg.auto_disarm_on_disconnect);
 		return;
 	}
 
@@ -427,9 +546,12 @@ void airplay_update(void *data, obs_data_t *settings)
 		ctx->receiver->start(ctx->active_config);
 	} else {
 		// Apply non-restart policy toggles live without restarting network sockets
+		ctx->active_config.receiver_armed = next_cfg.receiver_armed;
+		ctx->active_config.auto_disarm_on_disconnect = next_cfg.auto_disarm_on_disconnect;
 		ctx->active_config.pause_when_hidden = next_cfg.pause_when_hidden;
 		ctx->active_config.security = next_cfg.security;
 		ctx->receiver->update_security_policy(next_cfg.security);
+		ctx->receiver->set_auto_disarm_on_disconnect(next_cfg.auto_disarm_on_disconnect);
 	}
 }
 
@@ -440,8 +562,8 @@ void airplay_show(void *data)
 		return;
 
 	ctx->is_showing = true;
-	if (!ctx->receiver->is_running()) {
-		blog(LOG_INFO, "[obs-airplay] Source shown -> starting AirPlay receiver");
+	if (should_receiver_run(ctx, ctx->active_config) && !ctx->receiver->is_running()) {
+		blog(LOG_INFO, "[obs-airplay] Source shown while armed -> starting AirPlay receiver");
 		ctx->receiver->start(ctx->active_config);
 	}
 }
@@ -489,12 +611,31 @@ void *airplay_create(obs_data_t *settings, obs_source_t *source)
 		},
 		[](const std::string &status) {
 			blog(LOG_INFO, "[obs-airplay] Status: %s", status.c_str());
+		},
+		[source]() {
+			obs_weak_source_t *weak = obs_source_get_weak_source(source);
+			if (weak) {
+				obs_queue_task(OBS_TASK_UI, disarm_source_ui_task, weak, false);
+			}
 		});
+
+	ctx->hotkey_toggle_prime = obs_hotkey_register_source(
+		source, "obs_airplay.toggle_prime", obs_module_text("Hotkey.TogglePrime"),
+		on_hotkey_toggle_prime, ctx);
+	ctx->hotkey_prime_on = obs_hotkey_register_source(
+		source, "obs_airplay.prime_on", obs_module_text("Hotkey.PrimeOn"),
+		on_hotkey_prime_on, ctx);
+	ctx->hotkey_prime_off = obs_hotkey_register_source(
+		source, "obs_airplay.prime_off", obs_module_text("Hotkey.PrimeOff"),
+		on_hotkey_prime_off, ctx);
 
 	ctx->active_config = config_from_settings(settings);
 	ctx->is_showing = obs_source_showing(source);
-	if (!ctx->active_config.pause_when_hidden || ctx->is_showing) {
+	if (should_receiver_run(ctx, ctx->active_config)) {
 		ctx->receiver->start(ctx->active_config);
+	} else if (!ctx->active_config.receiver_armed) {
+		blog(LOG_INFO,
+		     "[obs-airplay] Receiver initialized OFF (Disarmed; zero sockets, zero mDNS until primed)");
 	} else {
 		blog(LOG_INFO,
 		     "[obs-airplay] Receiver initialized paused (source hidden in OBS; starts automatically when shown)");
@@ -507,6 +648,12 @@ void airplay_destroy(void *data)
 	auto *ctx = static_cast<AirPlaySourceContext *>(data);
 	if (!ctx)
 		return;
+	if (ctx->hotkey_toggle_prime != OBS_INVALID_HOTKEY_ID)
+		obs_hotkey_unregister(ctx->hotkey_toggle_prime);
+	if (ctx->hotkey_prime_on != OBS_INVALID_HOTKEY_ID)
+		obs_hotkey_unregister(ctx->hotkey_prime_on);
+	if (ctx->hotkey_prime_off != OBS_INVALID_HOTKEY_ID)
+		obs_hotkey_unregister(ctx->hotkey_prime_off);
 	if (ctx->receiver) {
 		ctx->receiver->stop();
 	}
